@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>hu</string>
-    <key>CFBundleDisplayName</key><string>Origins iOS próba</string>
+    <key>CFBundleDisplayName</key><string>Origins iOS Probe</string>
     <key>CFBundleExecutable</key><string>@PROBE_EXECUTABLE@</string>
     <key>CFBundleIdentifier</key><string>eu.sorin2.origins.iosprobe</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
