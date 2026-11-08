@@ -1,0 +1,136 @@
+name: Minimal unsigned iOS probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-probe:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: macos-26
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ios_port
+        shell: bash
+    steps:
+      - name: Checkout public probe sources
+        id: checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Inspect existing macOS toolchain and both SDKs
+        id: preflight
+        run: |
+          set -euo pipefail
+          mkdir -p build/ci-preflight
+          {
+            sw_vers
+            uname -m
+            test "$(uname -m)" = arm64
+            xcode-select -p
+            xcodebuild -version
+            cmake --version
+            xcrun --sdk iphonesimulator --show-sdk-version
+            xcrun --sdk iphonesimulator --show-sdk-path
+            xcrun --sdk iphoneos --show-sdk-version
+            xcrun --sdk iphoneos --show-sdk-path
+            xcrun --sdk iphoneos clang --version
+          } 2>&1 | tee build/ci-preflight/toolchain.log
+          printf 'build_date=%s\n' "$(date -u '+%Y%m%d')" >> "$GITHUB_OUTPUT"
+
+      - name: Build unsigned ARM64 simulator app
+        id: simulator
+        run: |
+          set -euo pipefail
+          build_date='${{ steps.preflight.outputs.build_date }}'
+          bash tools/ios/build_probe.sh simulator --date "$build_date"
+          output="build/${build_date}_minimal_probe/simulator"
+          tar -czf "$output/OriginsIOSProbe-simulator.app.tar.gz" -C "$output/artifacts" OriginsIOSProbe.app
+          (cd "$output" && shasum -a 256 OriginsIOSProbe-simulator.app.tar.gz > CI_ARTIFACTS.sha256)
+
+      - name: Build unsigned ARM64 device app and IPA
+        id: device
+        if: ${{ always() && !cancelled() && steps.checkout.outcome == 'success' && steps.preflight.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          build_date='${{ steps.preflight.outputs.build_date }}'
+          bash tools/ios/build_probe.sh device --date "$build_date"
+          output="build/${build_date}_minimal_probe/device"
+          tar -czf "$output/OriginsIOSProbe-device.app.tar.gz" -C "$output/artifacts" OriginsIOSProbe.app
+          (cd "$output" && shasum -a 256 OriginsIOSProbe-device.app.tar.gz artifacts/OriginsIOSProbe-unsigned.ipa > CI_ARTIFACTS.sha256)
+
+      - name: Upload successful simulator app archive
+        if: ${{ always() && steps.simulator.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: iosprobe-simulator-unsigned-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/simulator/OriginsIOSProbe-simulator.app.tar.gz
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload successful device app archive and unsigned IPA
+        if: ${{ always() && steps.device.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: iosprobe-device-unsigned-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/device/OriginsIOSProbe-device.app.tar.gz
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/device/artifacts/OriginsIOSProbe-unsigned.ipa
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload successful simulator receipts and logs
+        if: ${{ always() && steps.simulator.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: iosprobe-simulator-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/simulator/BUILD_RECEIPT.txt
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/simulator/SOURCES.*.sha256
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/simulator/ARTIFACTS.sha256
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/simulator/CI_ARTIFACTS.sha256
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/simulator/TOOLCHAIN.txt
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/simulator/COMMANDS.sh
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/simulator/build.log
+            ios_port/build/ci-preflight/toolchain.log
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload successful device receipts and logs
+        if: ${{ always() && steps.device.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: iosprobe-device-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/device/BUILD_RECEIPT.txt
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/device/SOURCES.*.sha256
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/device/ARTIFACTS.sha256
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/device/CI_ARTIFACTS.sha256
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/device/TOOLCHAIN.txt
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/device/COMMANDS.sh
+            ios_port/build/${{ steps.preflight.outputs.build_date }}_minimal_probe/device/build.log
+            ios_port/build/ci-preflight/toolchain.log
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload failure diagnostics only
+        if: ${{ failure() && steps.checkout.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: iosprobe-failure-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ios_port/build/ci-preflight/toolchain.log
+            ios_port/build/*_minimal_probe/*/BUILD_RECEIPT.txt
+            ios_port/build/*_minimal_probe/*/SOURCES.*.sha256
+            ios_port/build/*_minimal_probe/*/ARTIFACTS.sha256
+            ios_port/build/*_minimal_probe/*/CI_ARTIFACTS.sha256
+            ios_port/build/*_minimal_probe/*/TOOLCHAIN.txt
+            ios_port/build/*_minimal_probe/*/COMMANDS.sh
+            ios_port/build/*_minimal_probe/*/build.log
+          retention-days: 1
+          if-no-files-found: ignore
