@@ -38,9 +38,16 @@ Az [első CI-futás](https://github.com/kecskeslaszlo94/sorin2-origins-ios-probe
 
 A helyi AltServer-újraaláírás és iPhone-os telepítés sikeres; az app jelenlétét az eszköz alkalmazáslistája igazolta. A fejlesztői bizalom helyi jóváhagyása után a felhasználó megerősítette az app megnyitását, a gomb és a háttérből visszatérés működését. Ez a minimális platformpróba eredménye. Metal-renderelés, szimulátoros indulás, aláírásmegújítás és teljes játékos E2E még nincs igazolva; az app csak a Metal-eszköz elérhetőségét kérdezi le.
 
-## Következő, még nem futtatott kompatibilitási kísérletek
+## Kompatibilitási kísérletek
 
 - **ANGLE:** a pontos upstream commitból külön ARM64 iOS Simulator és iPhone `libEGL`/`libGLESv2` framework fordításának kísérlete. Aláírás kikapcsolva; GN-argumentumok, dependency-revíziók, teljes napló, tárhely és artifacthash rögzítve. A kézi job legfeljebb 60 percig fut, 10 GiB alatti induló szabad helynél megáll. Nincs teljes Chromium-fallback, fizetős runner vagy rendszereszköz-telepítés. A kandidátus még nincs Macen fordítva; framework-buildből sem következik renderelő app.
 - **Python 2.7.18:** saját SDK-típusméret/LLVM-IR diagnosztika, hivatalos pristine upstream host-bootstrap és iOS target-configure kísérlet. A stock konfiguráló Darwin cross-build akadálya ismert; a diagnosztikai eredmény lehet blokkolt, és nem jelent iOS-interpreter-PASS-t. Nincs Android-konfiguráció vagy játékadapter, automatikus patch és saját pyconfig a csomagban. A pontos scope és forráspin a Python-próba README-jében található.
 
 Mindkét kísérlet csak kézzel indítható, standard public `macos-26` runnerrel és read-only repository-jogosultsággal. Az upstream hookok nyilvános fordítási függőségeket tölthetnek le. A korábbi minimális app forrása és sikeres buildje változatlan marad.
+
+### Első diagnosztikai eredmények, 2026-11-08
+
+- [ANGLE42516327982](https://github.com/kecskeslaszlo94/sorin2-origins-ios-probe/actions/runs/42516327982): az upstream/dependency sync és hookok sikeresek. Mindkét platform a toolchain-ellenőrzés `gn --version` hívásánál, hiányzó `python3_bin_reldir.txt` depot_tools bootstrap fájl miatt állt meg. GN-generálás és framework-fordítás még nem történt. A diagnosztikai artifact feltöltése sikeres.
+- [Python42516330395](https://github.com/kecskeslaszlo94/sorin2-origins-ios-probe/actions/runs/42516330395): mindkét iOS SDK ABI-IR/makrófordítása sikeres; célon futtatás nincs. A pristine upstream commit/tree és forrásváltozatlanság igazolt. A macOS host configure `cannot compute sizeof (uintptr_t)` hibával állt meg; a preprocesszor SDK-flag útja vizsgálandó. Host build és iOS target-configure még nem történt. A teljes diagnosztika és hash-listája megőrzött; ez nem interpreter-PASS.
+
+Mindkét job befejeződött. A jelenlegi eredmény nem igazol renderelő appot vagy működő iOS-interpretert. A javítások és új futások külön folytatási lépésben készülnek.
