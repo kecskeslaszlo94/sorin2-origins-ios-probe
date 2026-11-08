@@ -26,4 +26,4 @@ A meglévő Xcode/CMake/iOS SDK-k ellenőrzése után külön ARM64 simulator é
 
 Az eredmények külön app/csomag és bizonyíték artifactokban, **egy napig** maradnának meg. Az `.app` könyvtárakat `tar.gz` őrzi meg a fájljogosultságokkal együtt; a simulatorhoz nincs IPA. A device IPA **aláíratlan, közvetlenül nem telepíthető**. A hash-ek, toolchain, parancsok, nyugták és naplók külön letölthetők; hiba esetén csak a rendelkezésre álló diagnosztika kerülne feltöltésre.
 
-Apple Clang-fordítás jelenleg nincs igazolva. Egy későbbi sikeres CI-build sem bizonyít appindulást, Metal-renderelést, Apple-aláírást, AltStore-kompatibilitást vagy valódi iPhone-os E2E-t. Ezek külön következő lépések.
+Az [első CI-futás](https://github.com/kecskeslaszlo94/sorin2-origins-ios-probe/actions/runs/42512584859) sikeresen elkészítette az ARM64 simulator és iPhone kimenetet a 165a217c9a194e0f032364565b03963682f8e795 forrásból, Xcode 26.6 és iOS SDK 26.5 használatával. Az IPA aláíratlan. Appindulás, Metal-renderelés, Apple-aláírás, AltStore-kompatibilitás és valódi iPhone-os E2E még külön ellenőrzendő.
