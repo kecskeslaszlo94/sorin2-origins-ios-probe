@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/python/cpython.git",
+  "tag": "v2.7.18",
+  "commit": "8d21aa21f2cbc6d50aab3f420bb23be1d081dac4",
+  "tree": "8133f47ade097d9fa33954a0211ea16b9088bfd3",
+  "version": "2.7.18",
+  "license_source": "https://github.com/python/cpython/blob/8d21aa21f2cbc6d50aab3f420bb23be1d081dac4/LICENSE",
+  "configure_reference": "https://github.com/python/cpython/blob/8d21aa21f2cbc6d50aab3f420bb23be1d081dac4/configure.ac#L332",
+  "upstream_patches": [],
+  "game_or_android_sources": false,
+  "deployment_target": "15.0",
+  "targets": {
+    "device": "arm64-apple-ios15.0",
+    "simulator": "arm64-apple-ios15.0-simulator"
+  },
+  "expected_blocker": "Stock cross configure accepts Linux/Cygwin, not Darwin/iOS. This diagnostic does not establish an iOS interpreter PASS."
+}

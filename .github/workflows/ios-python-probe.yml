@@ -1,0 +1,52 @@
+name: Upstream CPython 2.7.18 Apple diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python-stock-diagnostic:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: macos-26
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ios_port
+        shell: bash
+    steps:
+      - name: Checkout standalone public probe files
+        id: checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Measure both SDK ABIs and attempt pristine Python bootstrap
+        id: diagnostic
+        run: |
+          set -euo pipefail
+          bash tools/ios/build_python_probe.sh --run-id "ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+      - name: Verify curated evidence hashes and summarize the actual result
+        if: ${{ always() && !cancelled() && steps.checkout.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          evidence="build/python_probe/ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/publish"
+          test -f "$evidence/ARTIFACTS.sha256"
+          (cd "$evidence" && shasum -a 256 -c ARTIFACTS.sha256)
+          {
+            printf '### CPython stock diagnostic\n\n'
+            cat "$evidence/STATUS.txt"
+            printf '\nThis diagnostic never establishes an iOS interpreter PASS.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload only curated ABI artifacts and complete diagnostics
+        if: ${{ always() && !cancelled() && steps.checkout.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: python27-stock-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ios_port/build/python_probe/ci-${{ github.run_id }}-${{ github.run_attempt }}/publish/
+          retention-days: 1
+          if-no-files-found: error

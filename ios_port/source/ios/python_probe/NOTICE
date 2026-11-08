@@ -1,0 +1,16 @@
+Standalone upstream-only CPython 2.7.18 diagnostic
+
+The new probe and orchestration files do not contain game or Android code.
+They retrieve the official CPython source at runtime from:
+https://github.com/python/cpython
+Commit: 8d21aa21f2cbc6d50aab3f420bb23be1d081dac4 (v2.7.18)
+
+CPython is distributed under the licenses and notices in its upstream LICENSE:
+https://github.com/python/cpython/blob/8d21aa21f2cbc6d50aab3f420bb23be1d081dac4/LICENSE
+The full upstream license accompanies the diagnostic evidence after retrieval.
+Retain those notices when redistributing CPython source or derived binaries.
+
+No BeeWare, Kivy, OpenSSL, libffi, game, or Android patch is included.
+Historical port references are not executable dependencies of this probe.
+Python 2.7 is end-of-life; this is a compatibility investigation, not a
+maintained public Python distribution or a production-runtime approval.

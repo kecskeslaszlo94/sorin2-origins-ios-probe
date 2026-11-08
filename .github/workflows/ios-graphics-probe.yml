@@ -1,0 +1,143 @@
+name: Candidate ANGLE iOS framework build gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  angle-framework-candidate:
+    if: ${{ github.event.repository.private == false }}
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      DEPOT_TOOLS_UPDATE: '0'
+      DEPOT_TOOLS_METRICS: '0'
+      GIT_TERMINAL_PROMPT: '0'
+    defaults:
+      run:
+        working-directory: ios_port
+        shell: bash
+    steps:
+      - name: Checkout own public preparation only
+        id: checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Inspect runner and enforce free-space attempt budget
+        id: preflight
+        run: |
+          set -euo pipefail
+          mkdir -p work/20261108_graphics_probe/ci-evidence
+          {
+            sw_vers
+            test "$(uname -m)" = arm64
+            xcode-select -p
+            xcodebuild -version
+            xcrun --sdk iphoneos --show-sdk-version
+            xcrun --sdk iphonesimulator --show-sdk-version
+            df -h /
+            free_bytes=$(df -Pk . | awk 'NR==2 {printf "%.0f", $4 * 1024}')
+            printf 'free_bytes=%s\nminimum_attempt_budget_bytes=10737418240\n' "$free_bytes"
+            test "$free_bytes" -ge 10737418240
+          } 2>&1 | tee work/20261108_graphics_probe/ci-evidence/preflight.log
+          printf 'build_date=%s\n' "$(date -u '+%Y%m%d')" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch pinned public upstream and its declared dependencies
+        id: dependencies
+        run: |
+          set -euo pipefail
+          evidence="$PWD/work/20261108_graphics_probe/ci-evidence"
+          checkout="$PWD/work/20261108_graphics_probe/ci-upstream"
+          test ! -e "$checkout"
+          mkdir "$checkout"
+          {
+            unset FORCE_MAC_TOOLCHAIN
+            git init "$checkout/depot_tools"
+            git -C "$checkout/depot_tools" remote add origin https://chromium.googlesource.com/chromium/tools/depot_tools.git
+            git -C "$checkout/depot_tools" fetch --depth=1 origin 500126d6e351e4f0834b70f71b454ce5c3733c54
+            git -C "$checkout/depot_tools" checkout --detach FETCH_HEAD
+            test "$(git -C "$checkout/depot_tools" rev-parse HEAD)" = 500126d6e351e4f0834b70f71b454ce5c3733c54
+            export PATH="$checkout/depot_tools:$PATH"
+            git init "$checkout/angle"
+            git -C "$checkout/angle" remote add origin https://chromium.googlesource.com/angle/angle.git
+            git -C "$checkout/angle" fetch --depth=1 origin 686adbb2a39854ab687da009e534f6842a85f453
+            git -C "$checkout/angle" checkout --detach FETCH_HEAD
+            test "$(git -C "$checkout/angle" rev-parse HEAD)" = 686adbb2a39854ab687da009e534f6842a85f453
+            cd "$checkout/angle"
+            python3 scripts/bootstrap.py
+            python3 - <<'PY'
+          import pathlib, runpy
+          path = pathlib.Path('.gclient')
+          config = runpy.run_path(str(path))
+          config['solutions'][0].setdefault('custom_vars', {})['checkout_angle_dawn_deps'] = False
+          path.write_text('solutions = ' + repr(config['solutions']) + '\n', encoding='utf-8')
+          PY
+            gclient sync --nohooks --no-history
+            test "$(git rev-parse HEAD)" = 686adbb2a39854ab687da009e534f6842a85f453
+            test "$(git -C build rev-parse HEAD)" = 868caa11a252da114e621f87042cc3dacb70ef2e
+            test "$(python3 build/mac/should_use_hermetic_xcode.py mac)" = 0
+            test "$(python3 build/mac/should_use_hermetic_xcode.py ios)" = 0
+            gclient runhooks
+            gclient revinfo
+            df -h /
+            du -sh "$checkout"
+          } 2>&1 | tee "$evidence/dependencies.log"
+          printf '%s\n' "$checkout/depot_tools" >> "$GITHUB_PATH"
+
+      - name: Attempt unsigned ARM64 simulator frameworks
+        id: simulator
+        run: |
+          set -euo pipefail
+          bash tools/ios/build_graphics_probe.sh simulator \
+            --angle-root "$PWD/work/20261108_graphics_probe/ci-upstream/angle" \
+            --date '${{ steps.preflight.outputs.build_date }}' \
+            2>&1 | tee work/20261108_graphics_probe/ci-evidence/simulator-entry.log
+
+      - name: Attempt unsigned ARM64 device frameworks independently
+        id: device
+        if: ${{ always() && !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          bash tools/ios/build_graphics_probe.sh device \
+            --angle-root "$PWD/work/20261108_graphics_probe/ci-upstream/angle" \
+            --date '${{ steps.preflight.outputs.build_date }}' \
+            2>&1 | tee work/20261108_graphics_probe/ci-evidence/device-entry.log
+
+      - name: Upload successful simulator framework candidate
+        if: ${{ always() && steps.simulator.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: angle-simulator-unsigned-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ios_port/build/*_graphics_probe/simulator/artifacts/*.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload successful device framework candidate
+        if: ${{ always() && steps.device.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: angle-device-unsigned-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ios_port/build/*_graphics_probe/device/artifacts/*.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Preserve complete attempt diagnostics, including failures
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: angle-build-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ios_port/work/20261108_graphics_probe/ci-evidence/*.log
+            ios_port/build/*_graphics_probe/*/BUILD_RECEIPT.txt
+            ios_port/build/*_graphics_probe/*/COMMANDS.sh
+            ios_port/build/*_graphics_probe/*/TOOLCHAIN.txt
+            ios_port/build/*_graphics_probe/*/SPACE.txt
+            ios_port/build/*_graphics_probe/*/args.gn
+            ios_port/build/*_graphics_probe/*/*.sha256
+            ios_port/build/*_graphics_probe/*/build.log
+          if-no-files-found: ignore
+          retention-days: 1
